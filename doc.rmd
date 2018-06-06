@@ -1,0 +1,75 @@
+---
+title: Does measurement error in the exposure bias results
+author: Gibran Hemani, Neil Davies, Emma Anderson
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+MR of education on Alzheimer's disease (AD) shows a strong protective effect. However we tested to see if this is due to shared genetic variants with cognition. Multivariable MR of IQ and education on AD suggests that IQ drives the association. Explanations:
+
+1. EDU doesn't have an effect
+2. EDU -> IQ -> AD
+
+MV MR cannot distinguish between these two.
+
+Third possibility is that measurement error in the exposure (edu is distributed in a non-continuous way) leads to edu dropping out of the model.
+
+Here we simulate the most adverse situation where IQ -> EDU -> AD, where the genetic effects influence 'continuous edu' but we estimate the MR on 'non-continuous edu'.
+
+```{r}
+set.seed(123)
+n <- 50000
+nsnp <- 200
+iv <- matrix(rbinom(n * nsnp, 2, 0.5), n, nsnp)
+
+effiq <- rnorm(nsnp/2)
+effedu <- rnorm(nsnp/2)
+
+iq <- scale(iv[,1:100] %*% effiq + rnorm(n))
+edu <- scale(iv[,101:200] %*% effedu + iq + rnorm(n))
+ad <- edu + rnorm(n)
+
+edubad <- cut(edu, breaks=5)
+edubad <- scale(as.numeric(edubad))
+
+effiqhat <- rep(0, nsnp)
+effeduhat <- rep(0, nsnp)
+effedubadhat <- rep(0, nsnp)
+effadhat <- rep(0, nsnp)
+seiqhat <- rep(0, nsnp)
+seeduhat <- rep(0, nsnp)
+seedubadhat <- rep(0, nsnp)
+seadhat <- rep(0, nsnp)
+for(i in 1:nsnp)
+{
+	mod1 <- summary(lm(edubad ~ iv[,i]))
+	effedubadhat[i] <- coefficients(mod1)[2,1]
+	seedubadhat[i] <- coefficients(mod1)[2,2]
+
+	mod2 <- summary(lm(edu ~ iv[,i]))
+	effeduhat[i] <- coefficients(mod2)[2,1]
+	seeduhat[i] <- coefficients(mod2)[2,2]
+
+	mod3 <- summary(lm(iq ~ iv[,i]))
+	effiqhat[i] <- coefficients(mod3)[2,1]
+	seiqhat[i] <- coefficients(mod3)[2,2]
+
+	mod4 <- summary(lm(ad ~ iv[,i]))
+	effadhat[i] <- coefficients(mod4)[2,1]
+	seadhat[i] <- coefficients(mod4)[2,2]
+}
+```
+
+
+Result of analysis where edu does not have measurement error
+
+```{r}
+summary(lm(effadhat ~ effeduhat + effiqhat, weight=1/seadhat^2))
+```
+
+Result of analysis where edu does have measurement error
+
+```{r}
+summary(lm(effadhat ~ effedubadhat + effiqhat, weight=1/seadhat^2))
+```
